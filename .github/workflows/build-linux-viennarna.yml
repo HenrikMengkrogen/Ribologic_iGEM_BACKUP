@@ -1,0 +1,205 @@
+name: Build Linux ViennaRNA libraries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux-libraries:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            curl \
+            ca-certificates \
+            perl \
+            python3 \
+            xz-utils \
+            bison \
+            flex
+
+      - name: Build static GMP, MPFR, GSL, and ViennaRNA
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          BUILD_ROOT="$RUNNER_TEMP/rna-build"
+          PREFIX="$BUILD_ROOT/prefix"
+
+          mkdir -p "$BUILD_ROOT/src" "$PREFIX"
+
+          export PATH="$PREFIX/bin:$PATH"
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
+          export CPPFLAGS="-I$PREFIX/include"
+          export LDFLAGS="-L$PREFIX/lib"
+
+          cd "$BUILD_ROOT/src"
+
+          # GMP
+          curl --fail --location \
+            --retry 5 \
+            --retry-delay 5 \
+            --connect-timeout 30 \
+            --max-time 300 \
+            -o gmp-6.3.0.tar.xz \
+            https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+
+          tar -xf gmp-6.3.0.tar.xz
+          cd gmp-6.3.0
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --disable-shared \
+            --enable-static
+
+          make -j"$(nproc)"
+          make install
+
+          # MPFR
+          cd "$BUILD_ROOT/src"
+
+          curl --fail --location \
+            --retry 5 \
+            --retry-delay 5 \
+            --connect-timeout 30 \
+            --max-time 300 \
+            -o mpfr-4.2.1.tar.xz \
+            https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz
+
+          tar -xf mpfr-4.2.1.tar.xz
+          cd mpfr-4.2.1
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --with-gmp="$PREFIX" \
+            --disable-shared \
+            --enable-static
+
+          make -j"$(nproc)"
+          make install
+
+          # GSL
+          cd "$BUILD_ROOT/src"
+
+          curl --fail --location \
+            --retry 5 \
+            --retry-delay 5 \
+            --connect-timeout 30 \
+            --max-time 300 \
+            -o gsl-2.8.tar.gz \
+            https://ftp.gnu.org/gnu/gsl/gsl-2.8.tar.gz
+
+          tar -xf gsl-2.8.tar.gz
+          cd gsl-2.8
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --disable-shared \
+            --enable-static
+
+          make -j"$(nproc)"
+          make install
+
+          # ViennaRNA
+          cd "$BUILD_ROOT/src"
+
+          curl --fail --location \
+            --retry 5 \
+            --retry-delay 5 \
+            --connect-timeout 30 \
+            --max-time 300 \
+            -o ViennaRNA-2.7.0.tar.gz \
+            https://github.com/ViennaRNA/ViennaRNA/releases/download/v2.7.0/ViennaRNA-2.7.0.tar.gz
+
+          tar -xf ViennaRNA-2.7.0.tar.gz
+          cd ViennaRNA-2.7.0
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --disable-shared \
+            --enable-static \
+            --without-openmp \
+            --without-perl \
+            --without-python
+
+          make -j"$(nproc)"
+
+          # Do not use `make install`: ViennaRNA 2.7.0 may attempt to
+          # install optional Python files into /RNA on GitHub runners.
+          # We only need the static C archive for the Rust linker.
+          mkdir -p "$PREFIX/lib"
+
+          RNA_ARCHIVE="$(find . -type f -name libRNA.a -print -quit)"
+
+          if [ -z "$RNA_ARCHIVE" ]; then
+            echo "Could not find libRNA.a after building ViennaRNA" >&2
+            find . -type f -name 'libRNA*' -print >&2
+            exit 1
+          fi
+
+          cp "$RNA_ARCHIVE" "$PREFIX/lib/libRNA.a"
+
+          ls -lah "$PREFIX/lib/libRNA.a"
+
+
+
+      - name: Collect Linux archives
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          PREFIX="$RUNNER_TEMP/rna-build/prefix"
+          OUT_DIR="vendor/RNAlib/prebuilt/x86_64-unknown-linux-gnu"
+
+          mkdir -p "$OUT_DIR"
+
+          cp \
+            "$PREFIX/lib/libRNA.a" \
+            "$PREFIX/lib/libgsl.a" \
+            "$PREFIX/lib/libgslcblas.a" \
+            "$PREFIX/lib/libmpfr.a" \
+            "$PREFIX/lib/libgmp.a" \
+            "$OUT_DIR/"
+
+          ls -lah "$OUT_DIR"
+
+      - name: Verify Linux object format
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          mkdir -p /tmp/rna-library-check
+          cd /tmp/rna-library-check
+
+          ar x \
+            "$GITHUB_WORKSPACE/vendor/RNAlib/prebuilt/x86_64-unknown-linux-gnu/libRNA.a"
+
+          find . -maxdepth 1 -name '*.o' -print -quit | grep -q .
+
+          first_object="$(find . -maxdepth 1 -name '*.o' -print -quit)"
+
+          echo "Checking: $first_object"
+          file "$first_object"
+
+          file "$first_object" | grep -q 'ELF 64-bit.*x86-64'
+
+
+      - name: Upload Linux native libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: viennarna-x86_64-unknown-linux-gnu
+          path: vendor/RNAlib/prebuilt/x86_64-unknown-linux-gnu/
+          if-no-files-found: error
