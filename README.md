@@ -141,7 +141,7 @@ sudo apt-get install -y \
 
 Clone the repository and run the setup script:
 ```bash
-git clone https://github.com/HenrikMengkrogen/Ribosome_mut_program.git && cd Ribosome_mut_program && bash setup.sh
+git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git && cd Ribosome_mut_program && bash setup.sh
 ```
 The setup script installs required tools when needed and builds the project. This works the same way on both Intel and Apple Silicon Macs — `setup.sh` detects your CPU architecture and targets it automatically.
 
@@ -162,7 +162,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 ```bash
-git clone https://github.com/HenrikMengkrogen/Ribosome_mut_program.git
+git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
 cd Ribosome_mut_program
 ./setup.sh
 cargo run
@@ -175,7 +175,7 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
 2. Open the **"MSYS2 MinGW x64"** terminal from the Start menu (this specific shell is required).
 3. Clone the repository and run the setup script:
    ```bash
-   git clone https://github.com/HenrikMengkrogen/Ribosome_mut_program.git
+   git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
    cd Ribosome_mut_program
    ./setup.sh
    ```
