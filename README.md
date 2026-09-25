@@ -58,11 +58,9 @@ intended for source code). You are free to use, modify, and distribute this soft
 provided you keep the license and attribution notices. If you prefer different terms
 for your own tool, you may replace this license, but it must remain an
 [OSI-approved open-source license](https://opensource.org/licenses).
-<<<<<<< HEAD
->>>>>>> 8c10d6bbbf8852c79ddc14cd70a86d00b872c695
 
-<<<<<<< HEAD
-# Ribosomal Mutation Program
+
+# Ribologic RNA Mutation Program
 
 A Rust-based RNA sequence design tool built with the ViennaRNA library.
 
@@ -82,7 +80,7 @@ The program supports two sequence-generation modes:
    - `S` — `G` or `C`
 
 2. **Generate from a preferred starting sequence**  
-   When `RIBOSOMAL_RNA=True` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence.
+   When `RIBOSOMAL_RNA=True` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or what ever query sequence of desire.
 
    The output includes a percentage score indicating how much of the original sequence remains in the generated sequence.
 
