@@ -141,7 +141,7 @@ sudo apt-get install -y \
 
 Clone the repository and run the setup script:
 ```bash
-git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git && cd Ribosome_mut_program && bash setup.sh
+git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git && cd ribologic-rna-sequence-generator && bash setup.sh
 ```
 The setup script installs required tools when needed and builds the project. This works the same way on both Intel and Apple Silicon Macs — `setup.sh` detects your CPU architecture and targets it automatically.
 
@@ -163,7 +163,7 @@ source "$HOME/.cargo/env"
 ```
 ```bash
 git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
-cd Ribosome_mut_program
+cd ribologic-rna-sequence-generator
 ./setup.sh
 cargo run
 ```
@@ -176,7 +176,7 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
 3. Clone the repository and run the setup script:
    ```bash
    git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
-   cd Ribosome_mut_program
+   cd ribologic-rna-sequence-generator
    ./setup.sh
    ```
    This installs the MinGW toolchain, GMP, MPFR, and GSL via `pacman`, builds ViennaRNA from source, and adds the `x86_64-pc-windows-gnu` Rust target.
