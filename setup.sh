@@ -142,30 +142,123 @@ if [[ "$OS" != "windows" && "$(id -u)" -ne 0 ]]; then
     fi
 fi
 
+# Make the Windows GitHub Actions Rust installation visible from MSYS2.
+#
+# On GitHub-hosted Windows runners, USERPROFILE is generally:
+# C:\Users\runneradmin
+#
+# cygpath converts it into the MSYS2 form:
+# /c/Users/runneradmin
+if [[ "$OS" == "windows" ]]; then
+    have cygpath ||
+        die "cygpath was not found. Run this script from MSYS2 MINGW64."
+
+    WINDOWS_HOME="$(cygpath -u "$USERPROFILE")"
+
+    export CARGO_HOME="${CARGO_HOME:-$WINDOWS_HOME/.cargo}"
+    export RUSTUP_HOME="${RUSTUP_HOME:-$WINDOWS_HOME/.rustup}"
+    export PATH="$CARGO_HOME/bin:$PATH"
+
+    export LIBCLANG_PATH="${LIBCLANG_PATH:-/mingw64/bin}"
+
+    # Persist these variables for subsequent GitHub Actions steps.
+    #
+    # GITHUB_PATH is processed by GitHub Actions after setup.sh's step ends.
+    # cygpath -w makes the path readable by the Windows runner.
+    if [[ -n "${GITHUB_PATH:-}" ]]; then
+        cygpath -w "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+        cygpath -w "/mingw64/bin" >> "$GITHUB_PATH"
+    fi
+
+    if [[ -n "${GITHUB_ENV:-}" ]]; then
+        echo "LIBCLANG_PATH=/mingw64/bin" >> "$GITHUB_ENV"
+        echo "CARGO_HOME=$(cygpath -w "$CARGO_HOME")" >> "$GITHUB_ENV"
+        echo "RUSTUP_HOME=$(cygpath -w "$RUSTUP_HOME")" >> "$GITHUB_ENV"
+    fi
+fi
+
+
+
+
+
 # ── Rust setup ──────────────────────────────────────────────────
 
 setup_rust() {
-    if ! have cargo && [[ -f "$HOME/.cargo/env" ]]; then
-        # shellcheck disable=SC1091
-        source "$HOME/.cargo/env"
+    if [[ "$OS" == "windows" ]]; then
+        # CARGO_HOME and RUSTUP_HOME were established before this function,
+        # using USERPROFILE. Example:
+        # /c/Users/runneradmin/.cargo
+        export PATH="$CARGO_HOME/bin:$PATH"
+    else
+        export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+        export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+        export PATH="$CARGO_HOME/bin:$PATH"
     fi
 
+    # On macOS/Linux, rustup commonly supplies this environment file.
+    if ! have cargo && [[ -f "$CARGO_HOME/env" ]]; then
+        # shellcheck disable=SC1090
+        source "$CARGO_HOME/env"
+    fi
+
+    # Usually unnecessary on GitHub-hosted runners, but useful locally.
     if ! have cargo; then
         need_curl
 
-        echo "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "Cargo was not found; installing Rust..."
 
-        if [[ -f "$HOME/.cargo/env" ]]; then
-            # shellcheck disable=SC1091
-            source "$HOME/.cargo/env"
+        curl --proto '=https' --tlsv1.2 -sSf \
+            https://sh.rustup.rs | sh -s -- -y
+
+        export PATH="$CARGO_HOME/bin:$PATH"
+
+        if [[ -f "$CARGO_HOME/env" ]]; then
+            # shellcheck disable=SC1090
+            source "$CARGO_HOME/env"
         fi
     fi
 
-    have cargo || die "Rust installation failed; cargo was not found."
+    have cargo ||
+        die "Rust installation failed: cargo was not found in $CARGO_HOME/bin."
+
+    have rustup ||
+        die "Rust installation failed: rustup was not found in $CARGO_HOME/bin."
+
+    if [[ "$OS" == "windows" ]]; then
+        echo "Installing/selecting Windows GNU Rust toolchain..."
+
+        rustup toolchain install stable-x86_64-pc-windows-gnu
+        rustup override set stable-x86_64-pc-windows-gnu
+
+        rustup target add \
+            --toolchain stable-x86_64-pc-windows-gnu \
+            x86_64-pc-windows-gnu
+
+        # Persist Cargo and MinGW paths into later GitHub Actions steps.
+        #
+        # These must be Windows paths, hence `cygpath -w`.
+        if [[ -n "${GITHUB_PATH:-}" ]]; then
+            echo "Persisting Cargo and MinGW directories to GitHub Actions PATH..."
+
+            cygpath -w "$CARGO_HOME/bin" | tee -a "$GITHUB_PATH"
+            cygpath -w "/mingw64/bin" | tee -a "$GITHUB_PATH"
+        else
+            warn "GITHUB_PATH is not set; PATH changes apply only to this shell."
+        fi
+    else
+        rustup target add "$RUST_TARGET"
+    fi
+
+    echo "CARGO_HOME: ${CARGO_HOME:-unset}"
+    echo "Cargo location:  $(command -v cargo)"
+    echo "Rustup location: $(command -v rustup)"
 
     ok "Rust ready: $(cargo --version)"
+    ok "Rust compiler: $(rustc --version)"
 }
+
+
+
 
 # ── Library checks ──────────────────────────────────────────────
 
@@ -542,6 +635,13 @@ setup_windows() {
     export PATH="/mingw64/bin:$PATH"
     export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
 
+    export LIBCLANG_PATH="/mingw64/bin"
+
+    if [[ -n "${GITHUB_ENV:-}" ]]; then
+        echo "LIBCLANG_PATH=/mingw64/bin" >> "$GITHUB_ENV"
+    fi
+
+
     echo "Installing MSYS2 MinGW dependencies..."
 
     pacman -Sy --needed --noconfirm \
@@ -560,7 +660,7 @@ setup_windows() {
         bison \
         flex
 
-    rustup target add "$WINDOWS_TARGET"
+    #rustup target add "$WINDOWS_TARGET"
 
     local temp_dir
     local rna_archive
