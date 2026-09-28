@@ -73,7 +73,7 @@ Each slice is passed to `multi_start_hill_climb_design()`, which runs several in
 flowchart TD
     A[Initialize candidate sequence] --> B[Fold with ViennaRNA MFE and score]
     B --> C{Success or early-exit condition?}
-    C -- Yes --> Z[Reduce GC-content and return best candidates]
+    C -- Yes --> Z[return best candidates]
     C -- No --> D[Choose mutation position]
     D --> E{Stuck near solution?}
     E -- No --> F[Single-site or paired-base mutation]
