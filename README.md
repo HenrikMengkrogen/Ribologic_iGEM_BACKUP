@@ -1,16 +1,121 @@
-# Ribologic RNA Mutation Program
+# Ribologic RNA Sequence Generator
 
 **Team Aarhus University 2026 – Software**
 
 A Rust-based RNA sequence design tool built on the [ViennaRNA](https://www.tbi.univie.ac.at/RNA/) library. The program uses ViennaRNA folding and minimum-free-energy (MFE) algorithms to generate RNA sequences that match a supplied dot-bracket secondary structure.
 
-> **Using an AI assistant (e.g. Claude Code)?** Please read [.claude/RESPONSIBLE_AI_USE.md](.claude/RESPONSIBLE_AI_USE.md) first. You remain fully responsible for everything you commit: don't misrepresent what your tool does, never commit secrets, and review every change.
-
 ## Description
 
 Given a target RNA secondary structure in dot-bracket notation, the tool searches for sequences that fold into that structure. It runs several rounds of a multi-start hill-climbing design procedure, in parallel, and reports the best candidates.
 
-<!-- TODO: add a link to the team wiki here -->
+[Wiki](https://2026.igem.wiki/aarhus-university/)
+
+## How it works
+
+Ribologic designs sequences in four stages. It splits the target into nested **slices**, designs each slice with a hill-climbing search, repairs the assembled sequence globally, and finally verifies and annotates pseudoknots.
+
+```mermaid
+flowchart TD
+    A[Read Sequence and Structure from misc/input_*.txt] --> B[Resolve K/S ambiguity codes]
+    B --> C[Split target into nested slices]
+    C --> D[Design each slice, children before parents]
+    D --> E[Assemble full sequence and fill remaining N/K/S]
+    E --> F[Fold with ViennaRNA and check base-pair distance]
+    F --> G{Distance > 0?}
+    G -- Yes --> H[Global repair, then final focused repair]
+    G -- No --> I[Final verification]
+    H --> I
+    I --> J[Annotate pseudoknots, optional PKplex check]
+    J --> K[Report and save results]
+```
+
+### 1. Slicing the target
+
+ViennaRNA's MFE algorithm (Zuker) runs in O(n³), so folding one long sequence over and over is slow. Instead the target is broken into smaller problems, **slices**, which are solved in parallel:
+
+```mermaid
+flowchart LR
+    A[Full target structure] --> B[Identify top-level stem-loops]
+    B --> C[Descend into nested child loops]
+    C --> D[Design innermost slice first]
+    D --> E[Insert child sequence into full sequence]
+    E --> F[Design parent slice with child fixed]
+    F --> G[Continue outward and assemble]
+```
+
+The `slices` value in the output is the number of slices the target was split into.
+
+### 2. Designing a slice
+
+Each slice is passed to `multi_start_hill_climb_design()`, which runs several independent `hill_climb_design()` searches in parallel (4 by default). Each search works like this:
+
+```mermaid
+flowchart TD
+    A[Initialize candidate sequence] --> B[Fold with ViennaRNA MFE and score]
+    B --> C{Success or early-exit condition?}
+    C -- Yes --> Z[Return best candidates]
+    C -- No --> D[Choose mutation position]
+    D --> E{Stuck near solution?}
+    E -- No --> F[Single-site or paired-base mutation]
+    E -- Yes --> G[Exhaustively test a double mutation]
+    F --> H[Fold and score candidate]
+    G --> H
+    H --> I{Accept?}
+    I -- Yes --> J[Update current state and best pool]
+    I -- No --> K[Keep current state]
+    J --> L[Cool temperature]
+    K --> L
+    L --> C
+```
+
+For slices, the search exits early when the base-pair distance falls below a threshold that depends on the number of designable positions (always below 0.7) and the partition function shows that the remaining nucleotides are only weakly paired.
+
+#### Scoring a candidate
+
+1. **Strip pseudoknots.** ViennaRNA does not fold pseudoknots directly, so `[` and `]` in the target are converted to dots.
+2. **Mask fixed bases.** Fixed bases at positions that are unpaired in the target are treated as `N`, for folding only.
+3. **Fold.** ViennaRNA computes the MFE structure.
+4. **Measure the distance** to the pseudoknot-stripped target with `vrna_bp_distance()`:
+
+```math
+D_{\text{VRNA}} = \text{BPDistance}(S_{\text{MFE}},\, S_{\text{target without PK}})
+```
+
+Pseudoknot pairs are stored in a pair map, mutated together with the sequence, and scored with a penalty for each invalid pair and wobble-baspair:
+
+```math
+D_{\text{candidate}} = D_{\text{VRNA}} + 2 \times N_{\text{invalid PK pairs}}
+```
+
+A score of `0` means the candidate folds exactly into the target.
+
+#### Accepting candidates
+
+A candidate replaces the current one if its distance is lower, or if the distance is equal and its free energy is lower (same structure, more stable). A worse candidate is still accepted with probability
+
+```math
+P(\text{accept worse}) = \exp\!\left(-\frac{D_{\text{candidate}} - D_{\text{current}}}{T}\right)
+```
+
+where the temperature $T$ decreases linearly over time, so the search shifts from exploring to refining. If progress stalls once $T$ reaches its minimum of `0.05`, it is reset to `1`. The cooling rate is set from the number of designable positions.
+
+### 3. Repairing the full sequence
+
+**Global repair.** The best slice designs are assembled into the full sequence and the base-pair distance is recomputed. The remaining mismatched positions are then repaired in parallel for at most 800 iterations, where the iteration count scales with the distance:
+
+```math
+\text{repair steps} = \min\left(800,\; bp_distance/0.008)
+```
+
+It stops when the iteration limit is reached, or when the distance is below a precomputed threshold and the partition function shows low pair probabilities (about 0.5). A repaired sequence replaces the original only if it improves on it.
+
+**Final focused repair.** If the distance is still not below 2–3, `multi_start_hill_climb_design()` runs once more on the remaining mismatches. This time all paired nucleotides start as G–C pairs to favour strong stems. The exit criteria are stricter on pair probabilities (0.1) and looser on distance (3–5), and the iteration count is clamped between 1 and 50.
+
+### 4. Pseudoknot verification and annotation
+
+The ViennaRNA MFE structure contains no pseudoknots, so they are reinstated at the target's pseudoknot positions wherever the designed bases can form valid pairs. This should always be the case, since pseudoknot positions are treated as paired during design. The program then runs ViennaRNA's PKplex as a final, separate pseudoknot check.
+
+The reported **MFE structure with PK** is therefore the ViennaRNA MFE structure for the ordinary nested pairs, plus the target's pseudoknot brackets where the sequence supports valid base pairs. It is **not** a full thermodynamic pseudoknot MFE prediction. PKplex output is the separate pseudoknot-oriented check.
 
 ### Features
 
@@ -24,10 +129,10 @@ The program supports two sequence-generation modes:
    - `S` — `G` or `C`
 
 2. **Generate from a preferred starting sequence**
-   When `RIBOSOMAL_RNA=True` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or any other query sequence of your choice.
+   When `const RIBOSOMAL_RNA : bool = true;` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or any other query sequence of your choice.
 
    The output includes a percentage score indicating how much of the original sequence remains in the generated sequence.
-   Note that with this method the program uses longer time converging towards target structure, or might not quite reach it at all (`bp_distance > 0`)
+   Note that with this method the program uses longer time to converge towards target structure, or might not quite reach it at all (`bp_distance > 0`)
 
 Other features:
 
@@ -37,16 +142,7 @@ Other features:
 
 > **Note:** The `Python/` folder and Python script are legacy files and are not used by the current program.
 
-## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| Build fails with tiny "pointer" files in `vendor/` or linker errors about `libRNA.a` | You cloned without Git LFS. Run `git lfs install && git lfs pull`. |
-| `setup.sh` fails on Windows | Use the **"MSYS2 MinGW x64"** terminal. PowerShell, CMD, Git Bash, WSL and the plain MSYS2 shell won't work. |
-| `bindgen` error about `libclang` (Linux) | Install `clang` and `libclang-dev` (see Requirements). |
-| `cargo: command not found` | Install Rust, then run `source "$HOME/.cargo/env"` or restart your terminal. |
-| Setup seems frozen on an Intel Mac | Homebrew is likely compiling dependencies from source (e.g. LLVM). This can take a long time. Let it finish. |
-| Program uses all my CPU cores | Lower the number of parallel runs at the second prompt. |
 
 
 ### Supported platforms
@@ -55,11 +151,11 @@ Other features:
 
 | Platform | Architecture | Status |
 |---|---|---|
-| macOS | Intel (`x86_64-apple-darwin`) | Tested in CI |
-| macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested in CI |
-| Linux | `x86_64-unknown-linux-gnu` | Tested in CI |
+| macOS | Intel (`x86_64-apple-darwin`) | Tested (GitHub mirror CI) and Tested manually|
+| macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested (GitHub mirror CI) |
+| Linux | `x86_64-unknown-linux-gnu` | Tested (GitHub mirror CI) |
 | Linux | `aarch64-unknown-linux-gnu` | Should be supported by `setup.sh`, but not yet CI-tested |
-| Windows | `x86_64-pc-windows-gnu` (via MSYS2 MinGW64) | Tested in CI |
+| Windows | `x86_64-pc-windows-gnu` (via MSYS2 MinGW64) | Tested (GitHub mirror CI) |
 | WSL2 | Treated as Linux | Supported by `setup.sh` |
 
 On macOS and Linux, ViennaRNA is built from source by `setup.sh` if a prebuilt archive is not already present in `vendor/`; GSL, MPFR, and GMP are pulled from your package manager (Homebrew or your Linux distribution's package manager). On Windows, all native libraries (including ViennaRNA) are built from source using MSYS2 MinGW64.
@@ -193,6 +289,17 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
 
 > Native Windows support currently covers `x86_64` only.
 
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Build fails with tiny "pointer" files in `vendor/` or linker errors about `libRNA.a` | You cloned without Git LFS. Run `git lfs install && git lfs pull`. |
+| `setup.sh` fails on Windows | Use the **"MSYS2 MinGW x64"** terminal. PowerShell, CMD, Git Bash, WSL and the plain MSYS2 shell won't work. |
+| `bindgen` error about `libclang` (Linux) | Install `clang` and `libclang-dev` (see Requirements). |
+| `cargo: command not found` | Install Rust, then run `source "$HOME/.cargo/env"` or restart your terminal. |
+| Setup seems frozen on an Intel Mac | Homebrew is likely compiling dependencies from source (e.g. LLVM). This can take a long time. Let it finish. |
+| Program uses all my CPU cores | Lower the number of parallel runs at the second prompt. |
+
 ## Usage
 
 Run this command from the repository root, the directory containing `Cargo.toml`:
@@ -246,11 +353,11 @@ misc/output/
 
 ## Example
 
-**Input**: a file in `misc/` with the `input_` prefix, for example `misc/input_example.txt`:
+**Input**: a file in `misc/` with the `input_` prefix, for example `misc/input_1.txt`:
 
 ```
-Sequence:  GGGAAACCC
-Structure: (((...)))
+Sequence: NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNUUCGNNNNNNNNNCCGUGCGAGACGGUCGGGUCCAUAGCUAAUUCGUUAGUUAUGUCGAGUAGAGUGUGGGCUCGUACGGGGUGGUGAAGCCUCCACGCCACCNNNNNNNNNNNNNNNNNNNNNNCGACUGAAGGAGGCACGGUCGGCCAUCCGUUUCGACGGGUGGCNNNNNNNNNN
+Structure: (((((((((((((((((((((((((((((((((((((((((....)))))))))(((((((((.(.((...((((((((((((....)))))))))..)).)...))...).)))))))))(((((((..[[[[[[.)))))))))))))))))))))))))))))((((((..]]]]]].))))))(((((((((....)))))))))))))))))))
 ```
 
 The sequence and structure must be the same length.
@@ -258,13 +365,20 @@ The sequence and structure must be the same length.
 **Run**:
 
 ```
-$ cargo run --release
-How many rounds? [3]: 3
-How many parallel runs? [4]: 4
+$ cargo run
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running `target/debug/Ribosome_mut_program`
+========================================
+RNA design configuration
+Press Enter to accept a default value.
+========================================
+How many complete runs should be performed? [3]: 10
+How many hill-climbing starts per run? [5]: 8
 ```
 
 **Output**: written to `misc/output/`, and viewable in the terminal when asked (y/n):
 
+Best candidate across the 10 runs:
 ```
 ==== FINAL (run 4) ====
 sequence      : CUAUUACGCCCAACAUGAAACGAACUGGAAGCCACACCCGGUUCGCCGGGUGUGCCGUGCGAGACGGCCGGGUCCAUAGCUAAUUCGUUAGUUAUGUCGAGCAGAGUGUGGGCUCGUACGGGGUGGUGAAGCCUCCACGCCACCGCUUCCAGUUCGUUUCAUGUUGCGACUGAAGGAGGCACGGUCGGCCAUCCGUUUCGACGGGUGGCGGCGUAAUAG
@@ -277,11 +391,20 @@ Ribosomal RNA used: false
 GC Content: 75.58%
 ```
 
-<img src="docs/images/viewer.png" alt="Terminal viewer" width="600">
+**Reading the result**
 
-**Reading the result**: First line displays the generated sequence while target is the desired target structure in dot bracket notation. Below that is the mfe structure which is the final structure the sequence is predicted to have by ViennaRNA. Target and mfe structure might differ which can be seen in the bp_distance. This tells you how many positions is different between the target and predicted structure. Below that again is the mfe (mean free energy) which indicates the stability of the mfe structure. Slices shows how many substructures the sequence were sliced into while Ribosomal RNA used shows which mode the program runs at. If this is set to true a metrics of sequence identity is shown as well. GC content gives an indication of how many GC-pairs which is usually favoured in paired RNA-substructures such as stems and hairpin loops as well as pseudoknots.
+| Field | Meaning |
+|---|---|
+| `sequence` | The generated RNA sequence |
+| `target` | The structure you asked for (dot-bracket) |
+| `mfe structure` | The structure ViennaRNA predicts for the sequence |
+| `bp_distance` | Base-pair distance between target and predicted structure. `0` means an exact match |
+| `mfe` | Minimum free energy of the predicted structure in kcal/mol. More negative means more stable |
+| `slices` | Number of substructures the target was split into during design |
+| `Ribosomal RNA used` | Which mode was run. If `true`, a sequence-identity percentage is also shown |
+| `GC Content` | Fraction of G and C. High GC generally stabilises stems and hairpins |
 
-**Using a starting sequence**: to begin from a query sequence instead of ambiguous nucleotides, set `RIBOSOMAL_RNA=True` in <!-- FILL IN: file name, e.g. config.toml --> and put your query sequence in <!-- FILL IN: where -->.
+**Using a starting sequence**: to begin from a query sequence instead of ambiguous nucleotides, set `const RIBOSOMAL_RNA : bool = true` in `src/main.rs` and put your query sequence in `const RIBOSOME_SEQUENCE: &str = ""`.
 
 
 ## Data and large files
@@ -297,6 +420,8 @@ We welcome contributions. To get started:
 1. Install the requirements for your platform and Git LFS (see [Installation](#installation)).
 2. Clone the repository and run `setup.sh` (see the quick starts above).
 3. Create a branch, make your changes, and open a merge request against `main`.
+
+> **Using an AI assistant (e.g. Claude Code)?** Please read [.claude/RESPONSIBLE_AI_USE.md](.claude/RESPONSIBLE_AI_USE.md) first. You remain fully responsible for everything you commit: don't misrepresent what your tool does, never commit secrets, and review every change.
 
 Useful commands:
 
@@ -326,7 +451,9 @@ The Rust build script (`build.rs`) selects the correct prebuilt library director
 
 ### Continuous integration
 
-Every push and pull request is built and tested across all supported platforms — macOS Intel, macOS Apple Silicon, Linux x86_64, and Windows x86_64 (MSYS2 MinGW64) — using the workflows in `.github/workflows/` (`test-all-platforms.yml` and `build-linux-viennarna.yml`).
+The workflows in `.github/workflows/` (`test-all-platforms.yml`,
+`build-linux-viennarna.yml`) run on the GitHub mirror of this repository. The
+GitLab repository does not run them.
 
 ### Project structure
 
@@ -369,7 +496,7 @@ ribologic-rna-sequence-generator/
 
 Developed by iGEM Team Aarhus University 2026.
 
-<!-- TODO: list the individual contributors -->
+contributions: Henrik Mengkrogen
 
 This project builds on the [ViennaRNA Package](https://www.tbi.univie.ac.at/RNA/), and on the GMP, MPFR, and GSL libraries.
 
@@ -380,4 +507,5 @@ This repository is licensed under the [Apache License 2.0](LICENSE) — a permis
 
 ## Citation
 If you use this tool, please cite the iGEM Aarhus University 2026 team and ViennaRNA:
+
 Lorenz, R. et al. (2011). ViennaRNA Package 2.0. *Algorithms for Molecular Biology*, 6:26.
