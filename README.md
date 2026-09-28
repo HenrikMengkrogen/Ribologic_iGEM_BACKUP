@@ -42,7 +42,7 @@ flowchart TD
     E --> F[Fold with ViennaRNA and check base-pair distance]
     F --> G{Distance > 0?}
     G -- Yes --> H[Global repair, then two final focused repairs]
-    G -- No --> I[Reduce GC-pairs]
+    G -- No --> I[Reduce GC-pairs while keeping base-pair distance]
     H --> I
     I --> J[Final verification]
     J --> K[Annotate pseudoknots, optional PKplex check]
@@ -130,7 +130,9 @@ where $d_{\text{bp}}$ is the base-pair distance of the assembled sequence.
 
 It stops when the iteration limit is reached, or when the distance is below a precomputed threshold and the partition function shows low pair probabilities (about 0.5). A repaired sequence replaces the original only if it improves on it.
 
-**Final focused repair.** If the distance is still not below 2–3, `multi_start_hill_climb_design()` runs once more on the remaining mismatches. This time all paired nucleotides start as G–C pairs to favour strong stems. The exit criteria are stricter on pair probabilities (0.1) and looser on distance (3–5), and the iteration count is clamped between 1 and 50.
+**The final focused repairs.** If the distance is still not below 2–3, `multi_start_hill_climb_design()` runs twice more on the remaining mismatches. This time all paired nucleotides start as G–C pairs to favour strong stems. The exit criteria are stricter on pair probabilities (0.1) and looser on distance (3–5), and the iteration count is clamped between 1 and 100.
+
+**GC-cleanup**. After the the final repairs all GC-pairs in the designable positions are attempted substidized for AU-pairs while keeping the base-pair distance unchanged, or reduced. This is to reduce the inflated GC-content which usually ends up at around 80% before this step.
 
 ### 4. Pseudoknot verification and annotation
 
