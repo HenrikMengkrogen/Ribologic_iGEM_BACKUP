@@ -10,6 +10,31 @@ Given a target RNA secondary structure in dot-bracket notation, the tool searche
 
 [Wiki](https://2026.igem.wiki/aarhus-university/)
 
+### Features
+
+The program supports two sequence-generation modes:
+
+1. **Generate from ambiguous nucleotides**
+   Generate sequences from an input sequence containing ambiguous RNA nucleotide symbols such as:
+
+   - `N` — any nucleotide
+   - `K` — `G` or `U`
+   - `S` — `G` or `C`
+
+2. **Generate from a preferred starting sequence**
+   When `const RIBOSOMAL_RNA : bool = true;` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or any other query sequence of your choice.
+
+   The output includes a percentage score indicating how much of the original sequence remains in the generated sequence.
+   Note that with this method the program uses longer time to converge towards target structure, or might not quite reach it at all (`bp_distance > 0`)
+
+Other features:
+
+- Configurable number of design rounds and parallel runs.
+- Optional scrollable in-terminal viewer for the results, so you don't have to open multiple output files to find a candidate.
+- Cross-platform: macOS (Intel and Apple Silicon), Linux, and Windows.
+
+> **Note:** The `Python/` folder and Python script are legacy files and are not used by the current program.
+
 ## How it works
 
 Ribologic designs sequences in four stages. It splits the target into nested **slices**, designs each slice with a hill-climbing search, repairs the assembled sequence globally, and finally verifies and annotates pseudoknots.
@@ -47,7 +72,7 @@ The `slices` value in the output is the number of slices the target was split in
 
 ### 2. Designing a slice
 
-Each slice is passed to `multi_start_hill_climb_design()`, which runs several independent `hill_climb_design()` searches in parallel (4 by default). Each search works like this:
+Each slice is passed to `multi_start_hill_climb_design()`, which runs several independent `hill_climb_design()` searches in parallel (5 by default). Each search works like this:
 
 ```mermaid
 flowchart TD
@@ -117,30 +142,7 @@ The ViennaRNA MFE structure contains no pseudoknots, so they are reinstated at t
 
 The reported **MFE structure with PK** is therefore the ViennaRNA MFE structure for the ordinary nested pairs, plus the target's pseudoknot brackets where the sequence supports valid base pairs. It is **not** a full thermodynamic pseudoknot MFE prediction. PKplex output is the separate pseudoknot-oriented check.
 
-### Features
 
-The program supports two sequence-generation modes:
-
-1. **Generate from ambiguous nucleotides**
-   Generate sequences from an input sequence containing ambiguous RNA nucleotide symbols such as:
-
-   - `N` — any nucleotide
-   - `K` — `G` or `U`
-   - `S` — `G` or `C`
-
-2. **Generate from a preferred starting sequence**
-   When `const RIBOSOMAL_RNA : bool = true;` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or any other query sequence of your choice.
-
-   The output includes a percentage score indicating how much of the original sequence remains in the generated sequence.
-   Note that with this method the program uses longer time to converge towards target structure, or might not quite reach it at all (`bp_distance > 0`)
-
-Other features:
-
-- Configurable number of design rounds and parallel runs.
-- Optional scrollable in-terminal viewer for the results, so you don't have to open multiple output files to find a candidate.
-- Cross-platform: macOS (Intel and Apple Silicon), Linux, and Windows.
-
-> **Note:** The `Python/` folder and Python script are legacy files and are not used by the current program.
 
 
 
@@ -151,7 +153,7 @@ Other features:
 
 | Platform | Architecture | Status |
 |---|---|---|
-| macOS | Intel (`x86_64-apple-darwin`) | Tested (GitHub mirror CI) and Tested manually|
+| macOS | Intel (`x86_64-apple-darwin`) | Tested (GitHub mirror CI, plus manual)|
 | macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested (GitHub mirror CI) |
 | Linux | `x86_64-unknown-linux-gnu` | Tested (GitHub mirror CI) |
 | Linux | `aarch64-unknown-linux-gnu` | Should be supported by `setup.sh`, but not yet CI-tested |
@@ -236,20 +238,23 @@ git lfs pull
 Clone the repository and run the setup script:
 
 ```bash
-git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git && cd ribologic-rna-sequence-generator && bash setup.sh
+git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
+cd ribologic-rna-sequence-generator
+bash setup.sh
 ```
 
-The setup script installs required tools when needed and builds the project. This works the same way on Intel and Apple Silicon Macs — `setup.sh` detects your CPU architecture and targets it automatically.
+The setup script installs required tools when needed and builds the project. This works the same way on Intel and Apple Silicon Macs, because `setup.sh` detects your CPU architecture and targets it automatically.
+
+Then run the program (`--release` is faster):
+
+```bash
+cargo run --release
+```
 
 If Rust was not installed automatically, install it with:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-After installation, restart your terminal or load Rust into the current shell:
-
-```bash
 source "$HOME/.cargo/env"
 ```
 
@@ -266,7 +271,7 @@ source "$HOME/.cargo/env"
 git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
 cd ribologic-rna-sequence-generator
 ./setup.sh
-cargo run
+cargo run --release
 ```
 
 This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architecture and builds ViennaRNA from source if a prebuilt archive isn't already vendored.
@@ -284,7 +289,7 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
    This installs the MinGW toolchain, GMP, MPFR, and GSL via `pacman`, builds ViennaRNA from source, and adds the `x86_64-pc-windows-gnu` Rust target.
 4. Run the program, targeting the GNU toolchain:
    ```bash
-   cargo run --target x86_64-pc-windows-gnu
+   cargo run --release --target x86_64-pc-windows-gnu
    ```
 
 > Native Windows support currently covers `x86_64` only.
@@ -319,7 +324,7 @@ On Windows, pass `--target x86_64-pc-windows-gnu` to both commands.
 When the program starts you will be asked:
 
 1. **How many rounds to run.** Type a number and press Enter. The default is three rounds.
-2. **How many runs `multi_start_hill_climb_design()` should execute in parallel.** The default is four. The more parallel runs you choose, the more CPU cores are used, so choose with consideration.
+2. **How many runs `multi_start_hill_climb_design()` should execute in parallel.** The default is five. The more parallel runs you choose, the more CPU cores are used, so choose with consideration.
 
 Once the run has finished you can choose to view the results as a scrollable element in the terminal (y/n). This is useful for comparing candidates without opening multiple output files.
 
@@ -378,7 +383,7 @@ How many hill-climbing starts per run? [5]: 8
 
 **Output**: written to `misc/output/`, and viewable in the terminal when asked (y/n):
 
-Best candidate across the 10 runs:
+run 4 was the best of the 10:
 ```
 ==== FINAL (run 4) ====
 sequence      : CUAUUACGCCCAACAUGAAACGAACUGGAAGCCACACCCGGUUCGCCGGGUGUGCCGUGCGAGACGGCCGGGUCCAUAGCUAAUUCGUUAGUUAUGUCGAGCAGAGUGUGGGCUCGUACGGGGUGGUGAAGCCUCCACGCCACCGCUUCCAGUUCGUUUCAUGUUGCGACUGAAGGAGGCACGGUCGGCCAUCCGUUUCGACGGGUGGCGGCGUAAUAG
@@ -404,7 +409,7 @@ GC Content: 75.58%
 | `Ribosomal RNA used` | Which mode was run. If `true`, a sequence-identity percentage is also shown |
 | `GC Content` | Fraction of G and C. High GC generally stabilises stems and hairpins |
 
-**Using a starting sequence**: to begin from a query sequence instead of ambiguous nucleotides, set `const RIBOSOMAL_RNA : bool = true` in `src/main.rs` and put your query sequence in `const RIBOSOME_SEQUENCE: &str = ""`.
+**Using a starting sequence**: to begin from a query sequence instead of ambiguous nucleotides, set `const RIBOSOMAL_RNA: bool = true;` in `src/main.rs` and put your query sequence in `const RIBOSOME_SEQUENCE: &str = "...";`. Then rebuild and run with `cargo run --release` (or `cargo run` for a debug build, which is slower).
 
 
 ## Data and large files
