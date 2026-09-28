@@ -42,9 +42,9 @@ flowchart TD
     E --> F[Fold with ViennaRNA and check base-pair distance]
     F --> G{Distance > 0?}
     G -- Yes --> H[Global repair, then two final focused repairs]
-    G -- No --> I[Final verification]
+    G -- No --> I[Reduce GC-pairs]
     H --> I
-    I --> J[Reduce GC-pairs]
+    I --> J[Final verification]
     J --> K[Annotate pseudoknots, optional PKplex check]
     L --> M[Report and save results]
 ```
