@@ -46,6 +46,7 @@ flowchart TD
     H --> I
     I --> J[Final verification]
     J --> K[Annotate pseudoknots, optional PKplex check]
+    K--> L
     L --> M[Report and save results]
 ```
 
