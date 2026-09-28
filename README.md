@@ -27,6 +27,7 @@ The program supports two sequence-generation modes:
    When `RIBOSOMAL_RNA=True` is enabled in the program configuration, generation begins from the ribosomal large-subunit rRNA sequence, or any other query sequence of your choice.
 
    The output includes a percentage score indicating how much of the original sequence remains in the generated sequence.
+   Note that with this method the program uses longer time converging towards target structure, or might not quite reach it at all (`bp_distance > 0`)
 
 Other features:
 
@@ -35,6 +36,18 @@ Other features:
 - Cross-platform: macOS (Intel and Apple Silicon), Linux, and Windows.
 
 > **Note:** The `Python/` folder and Python script are legacy files and are not used by the current program.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Build fails with tiny "pointer" files in `vendor/` or linker errors about `libRNA.a` | You cloned without Git LFS. Run `git lfs install && git lfs pull`. |
+| `setup.sh` fails on Windows | Use the **"MSYS2 MinGW x64"** terminal. PowerShell, CMD, Git Bash, WSL and the plain MSYS2 shell won't work. |
+| `bindgen` error about `libclang` (Linux) | Install `clang` and `libclang-dev` (see Requirements). |
+| `cargo: command not found` | Install Rust, then run `source "$HOME/.cargo/env"` or restart your terminal. |
+| Setup seems frozen on an Intel Mac | Homebrew is likely compiling dependencies from source (e.g. LLVM). This can take a long time. Let it finish. |
+| Program uses all my CPU cores | Lower the number of parallel runs at the second prompt. |
+
 
 ### Supported platforms
 
@@ -231,6 +244,46 @@ Generated output files are written to:
 misc/output/
 ```
 
+## Example
+
+**Input**: a file in `misc/` with the `input_` prefix, for example `misc/input_example.txt`:
+
+```
+Sequence:  GGGAAACCC
+Structure: (((...)))
+```
+
+The sequence and structure must be the same length.
+
+**Run**:
+
+```
+$ cargo run --release
+How many rounds? [3]: 3
+How many parallel runs? [4]: 4
+```
+
+**Output**: written to `misc/output/`, and viewable in the terminal when asked (y/n):
+
+```
+==== FINAL (run 4) ====
+sequence      : CUAUUACGCCCAACAUGAAACGAACUGGAAGCCACACCCGGUUCGCCGGGUGUGCCGUGCGAGACGGCCGGGUCCAUAGCUAAUUCGUUAGUUAUGUCGAGCAGAGUGUGGGCUCGUACGGGGUGGUGAAGCCUCCACGCCACCGCUUCCAGUUCGUUUCAUGUUGCGACUGAAGGAGGCACGGUCGGCCAUCCGUUUCGACGGGUGGCGGCGUAAUAG
+target        : (((((((((((((((((((((((((((((((((((((((((....)))))))))(((((((((.(.((...((((((((((((....)))))))))..)).)...))...).)))))))))(((((((..[[[[[[.)))))))))))))))))))))))))))))((((((..]]]]]].))))))(((((((((....)))))))))))))))))))
+mfe structure : (((((((((((((((((((((((((((((((((((((((((....)))))))))(((((((((.(.((...((((((((((((....)))))))))..)).)...))...).)))))))))(((((((..[[[[[[.)))))))))))))))))))))))))))))((((((..]]]]]].))))))(((((((((....)))))))))))))))))))
+bp_distance   : 0
+mfe           : -110.40
+slices        : 12
+Ribosomal RNA used: false
+GC Content: 75.58%
+```
+
+![Terminal viewer showing designed sequences](docs/images/viewer.png)
+
+**Reading the result**: First line displays the generated sequence while target is the desired target structure in dot bracket notation. Below that is the mfe structure which is the final structure the sequence is predicted to have by ViennaRNA. Target and mfe structure might differ which can be seen in the bp_distance. This tells you how many positions is different between the target and predicted structure. Below that again is the mfe (mean free energy) which indicates the stability of the mfe structure. Slices shows how many substructures the sequence were sliced into while Ribosomal RNA used shows which mode the program runs at. If this is set to true a metrics of sequence identity is shown as well. GC content gives an indication of how many GC-pairs which is usually favoured in paired RNA-substructures such as stems and hairpin loops as well as pseudoknots.
+
+**Using a starting sequence**: to begin from a query sequence instead of ambiguous nucleotides, set `RIBOSOMAL_RNA=True` in <!-- FILL IN: file name, e.g. config.toml --> and put your query sequence in <!-- FILL IN: where -->.
+
+
 ## Data and large files
 
 Keep this repository for **source code**. For datasets, machine-learning model weights, large media, and other heavy artifacts, use [Zenodo](https://teams.igem.org/go/deliverables/software/zenodo) — it gives each upload a citable DOI and is the recommended long-term archive for iGEM teams. Reference your Zenodo records from this README so judges and future teams can find them.
@@ -323,3 +376,8 @@ This project builds on the [ViennaRNA Package](https://www.tbi.univie.ac.at/RNA/
 ## License
 
 This repository is licensed under the [Apache License 2.0](LICENSE) — a permissive open-source license recommended for software (Creative Commons licenses are *not* intended for source code). You are free to use, modify, and distribute this software, provided you keep the license and attribution notices. If you prefer different terms for your own tool, you may replace this license, but it must remain an [OSI-approved open-source license](https://opensource.org/licenses).
+
+
+## Citation
+If you use this tool, please cite the iGEM Aarhus University 2026 team and ViennaRNA:
+Lorenz, R. et al. (2011). ViennaRNA Package 2.0. *Algorithms for Molecular Biology*, 6:26.
