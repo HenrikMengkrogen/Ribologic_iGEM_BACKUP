@@ -2,15 +2,9 @@
 
 **Team Aarhus University 2026 – Software**
 
-A Rust-based RNA sequence design tool built on the [ViennaRNA](https://www.tbi.univie.ac.at/RNA/) library. The program uses ViennaRNA folding and minimum-free-energy (MFE) algorithms to generate RNA sequences that match a supplied dot-bracket secondary structure.
+A Rust-based RNA sequence design tool built on the [ViennaRNA](https://www.tbi.univie.ac.at/RNA/) library. Given a target RNA secondary structure in dot-bracket notation, it searches for sequences that fold into that structure. It uses ViennaRNA's minimum-free-energy (MFE) folding to score candidates, runs several rounds of a parallel multi-start hill-climbing design procedure, and reports the best results.
 
-## Description
-
-Given a target RNA secondary structure in dot-bracket notation, the tool searches for sequences that fold into that structure. It runs several rounds of a multi-start hill-climbing design procedure, in parallel, and reports the best candidates.
-
-[Wiki](https://2026.igem.wiki/aarhus-university/)
-
-### Features
+Team wiki: https://2026.igem.wiki/aarhus-university/
 
 The program supports two sequence-generation modes:
 
@@ -129,8 +123,9 @@ where the temperature $T$ decreases linearly over time, so the search shifts fro
 **Global repair.** The best slice designs are assembled into the full sequence and the base-pair distance is recomputed. The remaining mismatched positions are then repaired in parallel for at most 800 iterations, where the iteration count scales with the distance:
 
 ```math
-\text{repair steps} = \min\left(800,\; bp_distance/0.008)
+\text{repair steps} = \min\left(800,\; \frac{d_{\text{bp}}}{0.008}\right)
 ```
+where $d_{\text{bp}}$ is the base-pair distance of the assembled sequence.
 
 It stops when the iteration limit is reached, or when the distance is below a precomputed threshold and the partition function shows low pair probabilities (about 0.5). A repaired sequence replaces the original only if it improves on it.
 
@@ -155,7 +150,7 @@ The reported **MFE structure with PK** is therefore the ViennaRNA MFE structure 
 |---|---|---|
 | macOS | Intel (`x86_64-apple-darwin`) | Tested (GitHub mirror CI, plus manual)|
 | macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested (GitHub mirror CI) |
-| Linux | `x86_64-unknown-linux-gnu` | Tested (GitHub mirror CI) |
+| Linux | `x86_64-unknown-linux-gnu` | not yet tested |
 | Linux | `aarch64-unknown-linux-gnu` | Should be supported by `setup.sh`, but not yet CI-tested |
 | Windows | `x86_64-pc-windows-gnu` (via MSYS2 MinGW64) | Tested (GitHub mirror CI) |
 | WSL2 | Treated as Linux | Supported by `setup.sh` |
@@ -501,7 +496,7 @@ ribologic-rna-sequence-generator/
 
 Developed by iGEM Team Aarhus University 2026.
 
-contributions: Henrik Mengkrogen
+contributor(s): Henrik Mengkrogen
 
 This project builds on the [ViennaRNA Package](https://www.tbi.univie.ac.at/RNA/), and on the GMP, MPFR, and GSL libraries.
 
