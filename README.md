@@ -277,7 +277,7 @@ Ribosomal RNA used: false
 GC Content: 75.58%
 ```
 
-![Terminal viewer showing designed sequences](docs/images/viewer.png)
+<img src="docs/images/viewer.png" alt="Terminal viewer" width="600">
 
 **Reading the result**: First line displays the generated sequence while target is the desired target structure in dot bracket notation. Below that is the mfe structure which is the final structure the sequence is predicted to have by ViennaRNA. Target and mfe structure might differ which can be seen in the bp_distance. This tells you how many positions is different between the target and predicted structure. Below that again is the mfe (mean free energy) which indicates the stability of the mfe structure. Slices shows how many substructures the sequence were sliced into while Ribosomal RNA used shows which mode the program runs at. If this is set to true a metrics of sequence identity is shown as well. GC content gives an indication of how many GC-pairs which is usually favoured in paired RNA-substructures such as stems and hairpin loops as well as pseudoknots.
 
