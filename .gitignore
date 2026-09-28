@@ -5,5 +5,4 @@
 .DS_Store
 target/
 target 2/
-vendor/
 .Rhistory
