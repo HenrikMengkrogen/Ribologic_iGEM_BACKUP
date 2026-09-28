@@ -43,9 +43,10 @@ flowchart TD
     F --> G{Distance > 0?}
     G -- Yes --> H[Global repair, then two final focused repairs]
     G -- No --> I[Final verification]
-    H --> I[Reduce GC-pairs]
-    I --> J[Annotate pseudoknots, optional PKplex check]
-    J --> K[Report and save results]
+    H --> I
+    I --> J[Reduce GC-pairs]
+    J --> K[Annotate pseudoknots, optional PKplex check]
+    L --> M[Report and save results]
 ```
 
 ### 1. Slicing the target
