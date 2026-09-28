@@ -41,9 +41,9 @@ flowchart TD
     D --> E[Assemble full sequence and fill remaining N/K/S]
     E --> F[Fold with ViennaRNA and check base-pair distance]
     F --> G{Distance > 0?}
-    G -- Yes --> H[Global repair, then final focused repair]
+    G -- Yes --> H[Global repair, then two final focused repairs]
     G -- No --> I[Final verification]
-    H --> I
+    H --> I[Reduce GC-pairs]
     I --> J[Annotate pseudoknots, optional PKplex check]
     J --> K[Report and save results]
 ```
