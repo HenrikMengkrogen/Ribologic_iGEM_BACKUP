@@ -151,12 +151,13 @@ The reported **MFE structure with PK** is therefore the ViennaRNA MFE structure 
 
 | Platform | Architecture | Status |
 |---|---|---|
-| macOS | Intel (`x86_64-apple-darwin`) | Tested (GitHub mirror CI, plus manual)|
-| macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested (GitHub mirror CI) |
-| Linux | `x86_64-unknown-linux-gnu` | not yet tested |
-| Linux | `aarch64-unknown-linux-gnu` | Should be supported by `setup.sh`, but not yet CI-tested |
-| Windows | `x86_64-pc-windows-gnu` (via MSYS2 MinGW64) | Tested (GitHub mirror CI) |
+| macOS | Intel (`x86_64-apple-darwin`) | Tested in GitHub Actions CI |
+| macOS | Apple Silicon (`aarch64-apple-darwin`) | Tested in GitHub Actions CI |
+| Linux | `x86_64-unknown-linux-gnu` | Tested in GitHub Actions CI |
+| Linux | `aarch64-unknown-linux-gnu` | Tested in GitHub Actions CI when ARM64 runners are available |
+| Windows | `x86_64-pc-windows-gnu` via MSYS2 MinGW64 | Tested in GitHub Actions CI |
 | WSL2 | Treated as Linux | Supported by `setup.sh` |
+
 
 On macOS and Linux, ViennaRNA is built from source by `setup.sh` if a prebuilt archive is not already present in `vendor/`; GSL, MPFR, and GMP are pulled from your package manager (Homebrew or your Linux distribution's package manager). On Windows, all native libraries (including ViennaRNA) are built from source using MSYS2 MinGW64.
 
@@ -167,7 +168,9 @@ On macOS and Linux, ViennaRNA is built from source by `setup.sh` if a prebuilt a
 #### All platforms
 
 - Git and **Git LFS** (see [Git LFS](#git-lfs-required) below)
-- Approximately 500 MB of free disk space for the Rust toolchain and build files
+- At least 2–3 GB of free disk space for Rust, compiler toolchains, downloaded packages, and native-library builds
+- An Internet connection for the first setup run
+
 
 #### macOS
 
@@ -200,10 +203,14 @@ sudo apt-get install -y \
 
 #### Windows
 
-- Windows 10/11, `x86_64`
+- Windows 10 or Windows 11 on `x86_64`
 - [MSYS2](https://www.msys2.org/) installed
-- Git (available inside the MSYS2 MinGW64 shell, or installed separately)
-- The build must be run from the **"MSYS2 MinGW x64"** terminal specifically — not PowerShell, CMD, Git Bash, WSL, or the plain MSYS2 terminal
+- The build must be run from the **MSYS2 MinGW x64** terminal specifically.
+  Do **not** use PowerShell, Command Prompt, Git Bash, WSL, the plain MSYS2 shell, UCRT64, or CLANG64.
+- Internet access for the initial `pacman`, Rust, and ViennaRNA setup
+
+`setup.sh` configures the `stable-x86_64-pc-windows-gnu` Rust toolchain and installs the required MinGW64 packages. The first Windows setup may take several minutes because it downloads compilers, LLVM/Clang, autotools, GMP, MPFR, GSL, and builds ViennaRNA.
+
 
 ### Git LFS (required)
 
@@ -212,18 +219,16 @@ The prebuilt native libraries in `vendor/` are large binaries and are stored wit
 ```bash
 # macOS (Apple Silicon)
 brew install git-lfs
-# macOS (Intel): brew may build from source; download the prebuilt
-# darwin-amd64 release from https://github.com/git-lfs/git-lfs/releases instead
 
 # Ubuntu / Debian
 sudo apt-get install git-lfs
 
-# Windows (MSYS2 MinGW64)
-pacman -S mingw-w64-x86_64-git-lfs
+# Windows (MSYS2 MinGW x64)
+pacman -S --needed git-lfs
 
-# Then, once per machine:
+# Once per machine:
 git lfs install
-```
+````
 
 If you already cloned without Git LFS, run this inside the repository:
 
@@ -238,9 +243,11 @@ Clone the repository and run the setup script:
 ```bash
 git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
 cd ribologic-rna-sequence-generator
-bash setup.sh
-```
 
+# Run setup in the current shell so Cargo and native-library environment
+# variables remain available immediately afterward.
+source ./setup.sh
+```
 The setup script installs required tools when needed and builds the project. This works the same way on Intel and Apple Silicon Macs, because `setup.sh` detects your CPU architecture and targets it automatically.
 
 Then run the program (`--release` is faster):
@@ -258,17 +265,15 @@ source "$HOME/.cargo/env"
 
 ### Quick start: Linux
 
-Install the system requirements shown above, then install Rust if necessary:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
+Install the system requirements shown above, then clone the repository:
 
 ```bash
 git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
 cd ribologic-rna-sequence-generator
-./setup.sh
+
+# `source` keeps PATH and other setup environment variables in this shell.
+source ./setup.sh
+
 cargo run --release
 ```
 
@@ -278,14 +283,22 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
 
 1. Install [MSYS2](https://www.msys2.org/).
 2. Open the **"MSYS2 MinGW x64"** terminal from the Start menu (this specific shell is required).
-3. Clone the repository and run the setup script:
+    > This specific terminal is required. Do not use PowerShell, Command Prompt,
+    > Git Bash, WSL, the plain MSYS2 shell, UCRT64, or CLANG64.
+3. Install Git LFS if it is not already available:
+
+   ```bash
+   pacman -S --needed git-lfs
+   git lfs install
+   ```
+4. Clone the repository and run the setup script:
    ```bash
    git clone https://gitlab.igem.org/2026/software/aarhus-university/ribologic-rna-sequence-generator.git
    cd ribologic-rna-sequence-generator
-   ./setup.sh
+   source ./setup.sh
    ```
    This installs the MinGW toolchain, GMP, MPFR, and GSL via `pacman`, builds ViennaRNA from source, and adds the `x86_64-pc-windows-gnu` Rust target.
-4. Run the program, targeting the GNU toolchain:
+5. Run the program, targeting the GNU toolchain:
    ```bash
    cargo run --release --target x86_64-pc-windows-gnu
    ```
@@ -296,12 +309,14 @@ This works on both `x86_64` and `arm64` Linux; `setup.sh` detects your architect
 
 | Problem | Fix |
 |---|---|
-| Build fails with tiny "pointer" files in `vendor/` or linker errors about `libRNA.a` | You cloned without Git LFS. Run `git lfs install && git lfs pull`. |
-| `setup.sh` fails on Windows | Use the **"MSYS2 MinGW x64"** terminal. PowerShell, CMD, Git Bash, WSL and the plain MSYS2 shell won't work. |
-| `bindgen` error about `libclang` (Linux) | Install `clang` and `libclang-dev` (see Requirements). |
-| `cargo: command not found` | Install Rust, then run `source "$HOME/.cargo/env"` or restart your terminal. |
-| Setup seems frozen on an Intel Mac | Homebrew is likely compiling dependencies from source (e.g. LLVM). This can take a long time. Let it finish. |
-| Program uses all my CPU cores | Lower the number of parallel runs at the second prompt. |
+| Build fails with tiny "pointer" files in `vendor/` or linker errors about `libRNA.a` | Git LFS did not download the vendored files. Run `git lfs install && git lfs pull` from the repository root. |
+| `setup.sh` fails on Windows | Open **MSYS2 MinGW x64** specifically. PowerShell, CMD, Git Bash, WSL, plain MSYS2, UCRT64, and CLANG64 are unsupported for the native Windows build. |
+| `cargo: command not found` immediately after setup | Run `source ./setup.sh`, not `./setup.sh`. Alternatively, close and reopen the terminal after Rust installation. |
+| `cargo: command not found` on Windows after reopening MSYS2 | Confirm that Rust is installed, then run `source ./setup.sh` from MSYS2 MinGW x64. |
+| `bindgen` cannot find `libclang` | Run `source ./setup.sh` again. On Linux, ensure `clang` and `libclang-dev` are installed. |
+| Setup appears frozen during Windows installation | The first run may download/install a large MinGW64 toolchain and build ViennaRNA. Let `pacman` and `make` finish. |
+| Setup seems frozen on an Intel Mac | Homebrew may be compiling dependencies such as LLVM from source. This can take a long time. |
+| Program uses all CPU cores | Lower the number of parallel runs at the second prompt. |
 
 ## Usage
 
@@ -421,7 +436,7 @@ The one exception in this repository is the prebuilt native libraries in `vendor
 We welcome contributions. To get started:
 
 1. Install the requirements for your platform and Git LFS (see [Installation](#installation)).
-2. Clone the repository and run `setup.sh` (see the quick starts above).
+2. Clone the repository and run `source ./setup.sh` from a supported shell (see the quick starts above).
 3. Create a branch, make your changes, and open a merge request against `main`.
 
 > **Using an AI assistant (e.g. Claude Code)?** Please read [.claude/RESPONSIBLE_AI_USE.md](.claude/RESPONSIBLE_AI_USE.md) first. You remain fully responsible for everything you commit: don't misrepresent what your tool does, never commit secrets, and review every change.
@@ -431,6 +446,13 @@ Useful commands:
 ```bash
 cargo build            # debug build
 cargo run --release    # optimized build and run
+```
+
+For windows:
+
+```bash
+cargo build --target x86_64-pc-windows-gnu
+cargo run --release --target x86_64-pc-windows-gnu
 ```
 
 ### Native dependencies
@@ -454,9 +476,17 @@ The Rust build script (`build.rs`) selects the correct prebuilt library director
 
 ### Continuous integration
 
-The workflows in `.github/workflows/` (`test-all-platforms.yml`,
-`build-linux-viennarna.yml`) run on the GitHub mirror of this repository. The
-GitLab repository does not run them.
+The GitHub mirror runs `.github/workflows/test-all-platforms.yml`, which tests:
+
+- macOS Intel: `x86_64-apple-darwin`
+- macOS Apple Silicon: `aarch64-apple-darwin`
+- Linux x86_64: `x86_64-unknown-linux-gnu`
+- Linux ARM64: `aarch64-unknown-linux-gnu`, when GitHub-hosted ARM64 runners are available
+- Windows MSYS2 MinGW64: `x86_64-pc-windows-gnu`
+
+The Windows CI job uses MSYS2 MinGW64, runs `source ./setup.sh`, builds ViennaRNA and native dependencies, and runs both `cargo test` and `cargo build` for the GNU Windows target.
+
+These GitHub Actions workflows run on the GitHub mirror; they do not run automatically in the GitLab repository.
 
 ### Project structure
 
