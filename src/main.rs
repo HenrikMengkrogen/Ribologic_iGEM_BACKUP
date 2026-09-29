@@ -23,11 +23,12 @@ const RIBOSOMAL_RNA: bool = false;
 // RIBOSOMA_SEQUENCE can be changed to any start sequence of desire. If it is longer than the structure the sequence will be sliced accordingly.
 const RIBOSOME_SEQUENCE: &str = "GGCGCCCGCCCCGCGCCGGGGGCCGCCGGCCGGCGGCCCCGGGGGCCCCCCGCCCCCCCGCCCCGCGCGCCCCGCGCGGCGCGGGCCGCGGGCCGGGGGCGGCGCCGGGGCCCCCCCGCCCCCGGCCGGGCCCGGGGCCCGCGCCGGCCCCCCCCGGCGCCGGCGGGCGGGGCCCGCGCCCCGCCCCCGCGCGGCCCGCCCGCCGCGCCCCCCGCCGCCCGGC";
 const GC_TEST: bool = false; // This is just if you want your start sequence to be purely paired GC-pairs
+const GC_THRESHOLD: f64 = 50.00; // must be a float
 
 fn main() -> io::Result<()> {
     const DEFAULT_N_RUNS: usize = 3;
     const DEFAULT_N_STARTS: i64 = 5;
-    const MAX_STEPS: i64 = 2_100;
+    const MAX_STEPS: i64 = 1_500;
     const WOBBLE_FREQUENCY: f64 = 0.0;
 
     println!("========================================");
@@ -206,8 +207,10 @@ fn main() -> io::Result<()> {
                     println!("mfe structure: {}", r.mfe_structure);
                     println!("bp_distance  : {}", r.bp_distance);
                     println!("mfe          : {:.2}", r.mfe);
+                    println!("Ensemble Diversity: {:.2}", r.ensemble_diversity);
                     println!("slices       : {}", r.n_slices);
                     println!("Ribosomal RNA used: {}", RIBOSOMAL_RNA);
+                    
 
                     match gc_content(&r.sequence) {
                         Some(gc) => println!("GC Content: {:.2}%", gc),
@@ -250,6 +253,7 @@ fn main() -> io::Result<()> {
                     ));
                     final_results.push_str(&format!("bp_distance  : {}\n", r.bp_distance));
                     final_results.push_str(&format!("mfe          : {:.2}\n", r.mfe));
+                    final_results.push_str(&format!("Ensemble Diversity: {:.2}\n", r.ensemble_diversity));
                     final_results.push_str(&format!("slices       : {}\n", r.n_slices));
                     final_results.push_str(&format!(
                         "Ribosomal RNA used: {}\n",
@@ -315,6 +319,7 @@ fn main() -> io::Result<()> {
                     writeln!(file, "mfe structure : {}", r.mfe_structure).unwrap();
                     writeln!(file, "bp_distance   : {}", r.bp_distance).unwrap();
                     writeln!(file, "mfe           : {:.2}", r.mfe).unwrap();
+                    writeln!(file, "Ensemble Diversity : {:.2}", r.ensemble_diversity).unwrap();
                     writeln!(file, "slices        : {}", r.n_slices).unwrap();
                     writeln!(file, "Ribosomal RNA used: {}", RIBOSOMAL_RNA).unwrap();
 
@@ -371,7 +376,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    // This runs only once every run and input file has finished.
+    
     if !final_results.is_empty() && ask_to_view_results()? {
         show_in_pager(&final_results)?;
     }
@@ -595,6 +600,7 @@ pub struct GlobalDesignResult {
     n_slices: usize,
     ribosome_identity: Option<f64>,
     ribosome_mismatches: Option<Vec<usize>>,
+    ensemble_diversity: f64,         
 }
 #[derive(Debug, Clone)]
 pub struct Substructure {
@@ -721,6 +727,10 @@ fn hill_climb_design(
 
     let slice_len = target_structure.len();
     let n_designable = n_positions.len();
+
+    let designable_positions: HashSet<usize> =
+        n_positions.iter().copied().collect();
+        
     let n_fixed = slice_len.saturating_sub(n_designable);
     let fixed_fraction = n_fixed as f64 / slice_len.max(1) as f64;
 
@@ -837,9 +847,16 @@ fn hill_climb_design(
     current = current_chars.into_iter().collect();
 
     let init_result = bp_distance_to_target(&current, target_structure);
-    let mut current_dist = init_result.bp_distance;
+
+    let initial_pk_mismatches =
+        pk_pair_mismatches(&current, &pair_map, target_structure);
+
+    let mut current_dist =
+        init_result.bp_distance + 2 * initial_pk_mismatches as i64;
+
     let mut current_structure = init_result.structure.clone();
     let mut current_mfe = init_result.mfe;
+
     let mut current_energy_gap =
         (energy_of_target_structure(&current, target_structure) - init_result.mfe).max(0.0);
 
@@ -946,7 +963,7 @@ fn hill_climb_design(
             .copied()
             .collect();
 
-        if use_double {
+                if use_double {
             let mut search_positions: Vec<usize> = if stuck_positions.len() >= 2 {
                 stuck_positions.clone()
             } else {
@@ -955,6 +972,7 @@ fn hill_climb_design(
 
             if search_positions.len() > 30 {
                 use rand::seq::SliceRandom;
+
                 search_positions.shuffle(&mut rng);
                 search_positions.truncate(30);
             }
@@ -962,25 +980,47 @@ fn hill_climb_design(
             let mut best_trial = candidate.clone();
             let mut best_cost = f64::MAX;
 
-            for idx1 in 0..n_positions.len() {
-                for idx2 in (idx1 + 1)..n_positions.len() {
-                    let i1 = n_positions[idx1];
-                    let i2 = n_positions[idx2];
+            for idx1 in 0..search_positions.len() {
+                for idx2 in (idx1 + 1)..search_positions.len() {
+                    let i1 = search_positions[idx1];
+                    let i2 = search_positions[idx2];
 
-                    let opts1: Vec<char> = if let Some(&j) = pair_map.get(&i1) {
-                        if seq_in_chars[j] != 'N' {
-                            vec![comp_dict[&seq_in_chars[j]]]
-                        } else {
+                    
+                    if pair_map.get(&i1) == Some(&i2) {
+                        continue;
+                    }
+
+                    let opts1: Vec<char> = if let Some(&j1) = pair_map.get(&i1) {
+                        if designable_positions.contains(&j1) {
                             nucleotides.clone()
+                        } else {
+                            let fixed_partner = candidate[j1];
+
+                            vec![
+                                *comp_dict
+                                    .get(&fixed_partner)
+                                    .expect(
+                                        "fixed paired position must contain A, U, G, or C",
+                                    ),
+                            ]
                         }
                     } else {
                         nucleotides.clone()
                     };
-                    let opts2: Vec<char> = if let Some(&j) = pair_map.get(&i2) {
-                        if seq_in_chars[j] != 'N' {
-                            vec![comp_dict[&seq_in_chars[j]]]
-                        } else {
+
+                    let opts2: Vec<char> = if let Some(&j2) = pair_map.get(&i2) {
+                        if designable_positions.contains(&j2) {
                             nucleotides.clone()
+                        } else {
+                            let fixed_partner = candidate[j2];
+
+                            vec![
+                                *comp_dict
+                                    .get(&fixed_partner)
+                                    .expect(
+                                        "fixed paired position must contain A, U, G, or C",
+                                    ),
+                            ]
                         }
                     } else {
                         nucleotides.clone()
@@ -990,26 +1030,35 @@ fn hill_climb_design(
                         for &n2 in &opts2 {
                             let mut trial = candidate.clone();
 
+                            
                             trial[i1] = n1;
+
                             if let Some(&j1) = pair_map.get(&i1) {
-                                if seq_in_chars[j1] == 'N' {
+                                if designable_positions.contains(&j1) {
                                     trial[j1] = comp_dict[&n1];
                                 }
                             }
 
+                            
                             trial[i2] = n2;
+
                             if let Some(&j2) = pair_map.get(&i2) {
-                                if seq_in_chars[j2] == 'N' {
+                                if designable_positions.contains(&j2) {
                                     trial[j2] = comp_dict[&n2];
                                 }
                             }
 
                             let trial_str: String = trial.iter().collect();
-                            let trial_result = bp_distance_to_target(&trial_str, target_structure);
+
+                            let trial_result =
+                                bp_distance_to_target(&trial_str, target_structure);
+
                             let pk_mismatches =
                                 pk_pair_mismatches(&trial_str, &pair_map, target_structure);
+
                             let trial_cost =
-                                trial_result.bp_distance as f64 + 2.0 * pk_mismatches as f64;
+                                trial_result.bp_distance as f64
+                                    + 2.0 * pk_mismatches as f64;
 
                             if trial_cost < best_cost {
                                 best_cost = trial_cost;
@@ -1030,20 +1079,36 @@ fn hill_climb_design(
             };
 
             if let Some(&j) = pair_map.get(&i) {
-                if seq_in_chars[j] != 'N' {
+                
+                if !designable_positions.contains(&j) {
                     let current_nuc = candidate[i];
                     let mut best_nuc = current_nuc;
                     let mut best_cost = f64::MAX;
 
+                    
+                    let fixed_partner = candidate[j];
+
+                    let allowed_nucs = vec![
+                        *comp_dict
+                            .get(&fixed_partner)
+                            .expect("fixed paired position must contain A, U, G, or C"),
+                    ];
+
                     for &nuc in &nucleotides {
                         let mut trial = candidate.clone();
                         trial[i] = nuc;
+
                         let trial_str: String = trial.iter().collect();
-                        let trial_result = bp_distance_to_target(&trial_str, target_structure);
+
+                        let trial_result =
+                            bp_distance_to_target(&trial_str, target_structure);
+
                         let pk_mismatches =
                             pk_pair_mismatches(&trial_str, &pair_map, target_structure);
+
                         let trial_cost =
-                            trial_result.bp_distance as f64 + 2.0 * pk_mismatches as f64;
+                            trial_result.bp_distance as f64
+                                + 2.0 * pk_mismatches as f64;
 
                         if trial_cost < best_cost {
                             best_cost = trial_cost;
@@ -1052,10 +1117,12 @@ fn hill_climb_design(
                     }
 
                     if best_nuc == current_nuc {
-                        best_nuc = nucleotides[rng.random_range(0..nucleotides.len())];
+                        best_nuc = allowed_nucs[0];
                     }
+
                     candidate[i] = best_nuc;
                 } else {
+                    
                     let current_pair = (candidate[i], candidate[j]);
                     let mut best_pair = current_pair;
                     let mut best_cost = f64::MAX;
@@ -1064,12 +1131,18 @@ fn hill_climb_design(
                         let mut trial = candidate.clone();
                         trial[i] = ni;
                         trial[j] = nj;
+
                         let trial_str: String = trial.iter().collect();
-                        let trial_result = bp_distance_to_target(&trial_str, target_structure);
+
+                        let trial_result =
+                            bp_distance_to_target(&trial_str, target_structure);
+
                         let pk_mismatches =
                             pk_pair_mismatches(&trial_str, &pair_map, target_structure);
+
                         let trial_cost =
-                            trial_result.bp_distance as f64 + 2.0 * pk_mismatches as f64;
+                            trial_result.bp_distance as f64
+                                + 2.0 * pk_mismatches as f64;
 
                         if trial_cost < best_cost {
                             best_cost = trial_cost;
@@ -1078,13 +1151,15 @@ fn hill_climb_design(
                     }
 
                     if best_pair == current_pair {
-                        let idx = rng.random_range(0..pair_options.len());
-                        best_pair = pair_options[idx];
+                        best_pair =
+                            pair_options[rng.random_range(0..pair_options.len())];
                     }
+
                     candidate[i] = best_pair.0;
                     candidate[j] = best_pair.1;
                 }
             } else {
+                
                 let current_nuc = candidate[i];
                 let mut best_nuc = current_nuc;
                 let mut best_cost = f64::MAX;
@@ -1092,10 +1167,18 @@ fn hill_climb_design(
                 for &nuc in &nucleotides {
                     let mut trial = candidate.clone();
                     trial[i] = nuc;
+
                     let trial_str: String = trial.iter().collect();
-                    let trial_result = bp_distance_to_target(&trial_str, target_structure);
-                    let pk_mismatches = pk_pair_mismatches(&trial_str, &pair_map, target_structure);
-                    let trial_cost = trial_result.bp_distance as f64 + 2.0 * pk_mismatches as f64;
+
+                    let trial_result =
+                        bp_distance_to_target(&trial_str, target_structure);
+
+                    let pk_mismatches =
+                        pk_pair_mismatches(&trial_str, &pair_map, target_structure);
+
+                    let trial_cost =
+                        trial_result.bp_distance as f64
+                            + 2.0 * pk_mismatches as f64;
 
                     if trial_cost < best_cost {
                         best_cost = trial_cost;
@@ -1106,13 +1189,15 @@ fn hill_climb_design(
                 if best_nuc == current_nuc {
                     best_nuc = nucleotides[rng.random_range(0..nucleotides.len())];
                 }
+
                 candidate[i] = best_nuc;
             }
         }
 
         let candidate_string: String = candidate.into_iter().collect();
 
-        // --- Evaluate candidate ---
+
+        
         let guard_result = bp_distance_to_target(&candidate_string, target_structure);
         let cand_pk_mismatches = pk_pair_mismatches(&candidate_string, &pair_map, target_structure);
         let cand_dist = guard_result.bp_distance + 2 * cand_pk_mismatches as i64;
@@ -1233,6 +1318,7 @@ fn hill_climb_design(
         })
         .collect()
 }
+    
 
 fn multi_start_hill_climb_design(
     seq_in: &str,
@@ -1703,7 +1789,7 @@ pub fn decomposed_hill_climb_design(
         println!("Skipping GC cleanup");
         full_seq
     } else {
-        gc_cleanup(&full_seq, start_seq, target)
+        gc_cleanup(&full_seq, start_seq, target, GC_THRESHOLD)
     };
 
     let result = bp_distance_to_target(&full_seq, target);
@@ -1713,6 +1799,8 @@ pub fn decomposed_hill_climb_design(
     let result_no_pk = bp_distance_to_target(&full_seq, target);
     let pair_map = get_pair_map(target);
     let pk_penalty = pk_pair_mismatches(&full_seq, &pair_map, target) as i64;
+
+    let ensemble_diversity_score: f64 = ensemble_diversity(&full_seq, target);
 
     println!("---- global verification ----");
     println!("designed:                 {}", full_seq);
@@ -1724,6 +1812,7 @@ pub fn decomposed_hill_climb_design(
     println!("pk penalty (bad pk pairs): {}", pk_penalty);
     println!("bp_distance (pk-aware):   {}", result.bp_distance);
     println!("mfe (VRNA, no pk energy): {:.2}", result.mfe);
+    println!("ensemble diversity:       {:.2}", ensemble_diversity_score);
 
     let pk_predictions = fold_with_pkplex(&full_seq);
     if !pk_predictions.is_empty() {
@@ -1760,6 +1849,7 @@ pub fn decomposed_hill_climb_design(
         n_slices: slices.len(),
         ribosome_identity,
         ribosome_mismatches,
+        ensemble_diversity: ensemble_diversity_score,   
     })
 }
 
@@ -2701,7 +2791,7 @@ fn gc_content(sequence: &str) -> Option<f64> {
                 gc_count += 1;
                 base_count += 1;
             }
-            b'A' | b'T' => {
+            b'A' | b'U' => {
                 base_count += 1;
             }
             _ => {} 
@@ -2744,6 +2834,7 @@ fn gc_cleanup(
     seq_in: &str,
     original_annotation: &str,
     target: &str,
+    min_gc_percent: f64,
 ) -> String {
     assert_eq!(seq_in.len(), original_annotation.len());
     assert_eq!(seq_in.len(), target.len());
@@ -2786,6 +2877,14 @@ fn gc_cleanup(
             if !is_gc_pair {
                 continue;
             }
+
+            let live_seq = String::from_utf8(seq.clone()).expect("sequence must be valid UTF-8");
+            let current_gc = gc_content(&live_seq).unwrap_or(0.0);
+            let gc_after = current_gc - (200.0/seq.len() as f64);
+
+            if gc_after < min_gc_percent {
+                continue;
+            } 
 
             
             let mut best_trial: Option<(Vec<u8>, DesignResult)> = None;
@@ -2837,4 +2936,50 @@ fn gc_cleanup(
     );
 
     current
+}
+
+fn ensemble_diversity(seq: &str, target: &str) -> f64 {
+    let n = seq.len();
+    let target_no_pk = strip_pseudoknots(target);
+    let pair_map = get_pair_map(&target_no_pk);
+
+    unsafe {
+        let mut md: vrna_md_t = std::mem::zeroed();
+        vrna_md_set_default(&mut md);
+        md.temperature = 37.0;
+        md.dangles = 1;
+
+        let seq_c: CString = CString::new(seq).expect("seq has interior NUL");
+        let fc = vrna_fold_compound(seq_c.as_ptr(), &md, VRNA_OPTION_PF as u32);
+        assert!(!fc.is_null(), "fold_compound returned null");
+
+        let mut pf_struct: Vec<i8> = vec![0i8; n + 1];
+        let _pf_energy = vrna_pf(fc, pf_struct.as_mut_ptr());
+
+        let exp_matrices = (*fc).exp_matrices;
+        assert!(!exp_matrices.is_null(), "exp_matrices is null");
+
+        let probs_ptr = (*exp_matrices).__bindgen_anon_1.__bindgen_anon_1.probs;
+        let iindx_ptr = (*fc).iindx;
+        assert!(!probs_ptr.is_null(), "probs is null after vrna_pf");
+        assert!(!iindx_ptr.is_null(), "iindx is null");
+
+        let mut diversity = 0.0_f64;
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let iindx_val: isize = *iindx_ptr.add(i + 1) as isize;
+                let idx: isize = iindx_val - (j + 1) as isize;
+                let p_ij: f64 = (*probs_ptr.offset(idx)) as f64;
+
+                let is_target_pair: bool = pair_map.get(&i) == Some(&j);
+
+                diversity += if is_target_pair { 1.0 - p_ij } else { p_ij };
+            }
+        }
+
+        vrna_fold_compound_free(fc);
+
+        diversity
+    }
 }
