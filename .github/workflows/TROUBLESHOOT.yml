@@ -92,8 +92,6 @@ jobs:
       - name: Setup, test, and build
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        env:
-          PYTHON_DIR: ${{ env.pythonLocation }}
         run: |
           
 
