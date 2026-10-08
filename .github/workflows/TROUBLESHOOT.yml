@@ -97,6 +97,7 @@ jobs:
 
           chmod +x ./setup.sh
           source ./setup.sh
+          rm -rf vendor/RNAlib/include vendor/RNAlib/prebuilt
 
           export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
           cargo --version
