@@ -51,21 +51,24 @@ annotates pseudoknots.
 ```mermaid
 
 flowchart TD
-    A[Read input] --> B[Resolve K/S]
+    A[Read input] --> B[Get pair map]
     B --> C[Split nested slices]
     C --> D[Design slices<br/>children → parents]
-    D --> E[Assemble sequence<br/>fill N/K/S]
-    E --> F[ViennaRNA fold<br/>check BP distance]
-    F --> G{Distance > 0?}
-    G -->|Yes| H[Global + focused repair]
-    G -->|No| I[Reduce GC pairs]
-    H --> I
-    I --> J[Final verification]
+    D --> E[Repair slices<br/>children → parents]
+    E --> F{Distance > threshold?}
+    F --> |Yes| E
+    F --> |No| G[Assemble sequence<br/>fill N/K/S]
+    G --> H[ViennaRNA fold<br/>check BP distance]
+    H --> I{Distance > 0?}
+    I -->|Yes| J[Global + 2 focused repair]
+    I -->|No| K[Reduce GC pairs and calculate ensemble diversity]
+    J --> K
+    K --> L[Final verification]
 
-    J --> K[Annotate pseudoknots<br/>optional PKplex]
-    K --> L[Report results]
+    L --> M[Annotate pseudoknots<br/>optional PKplex]
+    M --> N[Report results]
 
-    J ~~~ K
+    
 ```
 
 
@@ -80,9 +83,14 @@ flowchart LR
     A[Full target structure] --> B[Identify top-level stem-loops]
     B --> C[Descend into nested child loops]
     C --> D[Design innermost slice first]
-    D --> E[Insert child sequence into full sequence]
-    E --> F[Design parent slice with child fixed]
-    F --> G[Continue outward and assemble]
+    D --> E{Basepair distance >0?}
+    E --> |Yes| --> H
+    E --> |No| --> I
+    H[Repair]
+    H --> E
+    I[Insert child sequence into full sequence]
+    I --> J[Design parent slice with child fixed]
+    J --> K[Continue outward and assemble]
 ```
 
 The `slices` value in the output is the number of slices the target was
@@ -102,16 +110,21 @@ flowchart TD
     A[Initialize candidate sequence] --> B[Fold with ViennaRNA MFE and score]
     B --> C{Success or early-exit condition?}
     C -- Yes --> Z[return best candidates]
-    C -- No --> D[Choose mutation position]
+    C -- No --> D[Choose mutation position] 
     D --> E{Stuck near solution?}
     E -- No --> F[Single-site or paired-base mutation]
-    E -- Yes --> G[Exhaustively test a double mutation]
+    E -- Yes --> G[Increase mutable positions]
+    G --> N{Still stuck?}
+    N --> |Yes| O[Double mutation]
+    O --> H
+    N --> |No| H
     F --> H[Fold and score candidate]
     G --> H
     H --> I{Accept?}
     I -- Yes --> J[Update current state and best pool]
     I -- No --> K[Keep current state]
-    J --> L[Cool temperature]
+    J --> M[Remove solved positions from mutable list]
+    M --> L[Cool temperature]
     K --> L
     L --> C
 ```
