@@ -33,6 +33,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
 
       
 
@@ -93,6 +96,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
+
+          
+
+          git lfs install
+          git lfs pull
+          git lfs checkout
+
+          
+          HEADER="vendor/RNAlib/include/ViennaRNA/fold_compound.h"
+          echo "Checking ViennaRNA header after LFS checkout:"
+          head -n 5 "$HEADER"
+
+          if head -n 1 "$HEADER" | grep -q "git-lfs.github.com/spec"; then
+            echo "ERROR: $HEADER is still a Git LFS pointer."
+            exit 1
+          fi
 
           
 
