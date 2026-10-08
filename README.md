@@ -78,17 +78,15 @@ ViennaRNA's MFE algorithm (Zuker) runs in O(n³), so folding one long
 sequence over and over is slow. Instead the target is broken into
 smaller problems, **slices**, which are solved in parallel:
 
-``` mermaid
+```mermaid
 flowchart LR
     A[Full target structure] --> B[Identify top-level stem-loops]
     B --> C[Descend into nested child loops]
     C --> D[Design innermost slice first]
-    D --> E{Basepair distance >0?}
-    E --> |Yes| --> H
-    E --> |No| --> I
-    H[Repair]
+    D --> E{"Base-pair distance > 0?"}
+    E -->|Yes| H[Repair]
+    E -->|No| I[Insert child sequence into full sequence]
     H --> E
-    I[Insert child sequence into full sequence]
     I --> J[Design parent slice with child fixed]
     J --> K[Continue outward and assemble]
 ```
