@@ -13,6 +13,8 @@
 #   3. Clone this repository and run:
 #        ./setup.sh
 
+set -e
+
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -28,7 +30,7 @@ die()  { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
 VIENNARNA_VERSION="${VIENNARNA_VERSION:-2.7.2}" # ORIGINALLY 2.6.4
 
 # ViennaRNA version for Windows MinGW source builds.
-VIENNARNA_WINDOWS_VERSION="${VIENNARNA_WINDOWS_VERSION:-2.7.0}" # ORIGINALLY 2.7.0
+VIENNARNA_WINDOWS_VERSION="${VIENNARNA_WINDOWS_VERSION:-2.7.2}" # ORIGINALLY 2.7.0
 
 # Always work from the repository root, where this script lives.
 cd "$(dirname "${BASH_SOURCE[0]}")"
