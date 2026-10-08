@@ -25,10 +25,10 @@ warn() { echo -e "${YELLOW}! $*${NC}"; }
 die()  { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
 
 # ViennaRNA version for macOS/Linux source builds.
-VIENNARNA_VERSION="${VIENNARNA_VERSION:-2.6.4}"
+VIENNARNA_VERSION="${VIENNARNA_VERSION:-2.7.2}" # ORIGINALLY 2.6.4
 
 # ViennaRNA version for Windows MinGW source builds.
-VIENNARNA_WINDOWS_VERSION="${VIENNARNA_WINDOWS_VERSION:-2.7.0}"
+VIENNARNA_WINDOWS_VERSION="${VIENNARNA_WINDOWS_VERSION:-2.7.2}" # ORIGINALLY 2.7.0
 
 # Always work from the repository root, where this script lives.
 cd "$(dirname "${BASH_SOURCE[0]}")"
