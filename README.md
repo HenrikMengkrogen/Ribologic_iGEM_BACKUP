@@ -521,6 +521,7 @@ GC Content: 51.03%
 | `mfe structure` | The structure ViennaRNA predicts for the sequence |
 | `bp_distance` | Base-pair distance between target and predicted structure. `0` means an exact match |
 | `mfe` | Minimum free energy of the predicted structure in kcal/mol. More negative means more stable |
+| `Ensemble Diversity` | The average distance between the structures in an ensemble. It essentially means how many different structures can be predicted from the same sequence |
 | `slices` | Number of substructures the target was split into during design |
 | `Ribosomal RNA used` | Which mode was run. If `true`, a sequence-identity percentage is also shown |
 | `GC Content` | Fraction of G and C. High GC generally stabilises stems and hairpins |
