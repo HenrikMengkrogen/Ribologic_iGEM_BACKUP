@@ -93,6 +93,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
+        
+          git lfs install
+          git lfs pull
+          git lfs checkout
           
 
           chmod +x ./setup.sh
